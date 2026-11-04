@@ -63,6 +63,7 @@ def fake_python(checkout):
 def install(checkout, fake_python, *args, **extra_env):
     env = {
         **os.environ,
+        "AHAB_SKIP_ROOT": "1",
         "INSTALL_LOG": (checkout / "pip.log").as_posix(),
         "AHAB_ALLOW_NONROOT": "1",
         **extra_env,
@@ -84,16 +85,17 @@ def install(checkout, fake_python, *args, **extra_env):
 
 
 @pytest.mark.skipif(
-    not BASH or sys.platform not in ("linux", "darwin"),
-    reason="Installer tests require Linux/macOS",
+    not BASH,
+    reason="Installer tests require bash and Linux/macOS (skipped on Windows without WSL)",
 )
 def test_dev_install_preserves_config(checkout, fake_python, tmp_path):
-    target = tmp_path / "opt" / "ahab"
+    """Test installer with AHAB_SKIP_ROOT=1 uses temp dirs."""
+    target = tmp_path / "test-ahab"
     env = {
         **os.environ,
         "AHAB_INSTALL_DIR": target.as_posix(),
+        "AHAB_SKIP_ROOT": "1",
         "INSTALL_LOG": (checkout / "pip.log").as_posix(),
-        "AHAB_ALLOW_NONROOT": "1",
     }
     result = subprocess.run(
         [BASH, (checkout / "install.sh").as_posix(), "--python", fake_python.as_posix(), "--dev"],
@@ -122,18 +124,18 @@ def test_dev_install_preserves_config(checkout, fake_python, tmp_path):
 
 
 @pytest.mark.skipif(
-    not BASH or sys.platform not in ("linux", "darwin"),
-    reason="Installer tests require Linux/macOS",
+    not BASH,
+    reason="Installer tests require bash and Linux/macOS (skipped on Windows without WSL)",
 )
 @pytest.mark.parametrize("failure", ["FAIL_VERSION", "FAIL_INSTALL"])
 def test_dev_failure_does_not_copy_config(checkout, fake_python, failure, tmp_path):
-    target = tmp_path / "opt" / "ahab"
+    target = tmp_path / "test-ahab"
     env = {
         **os.environ,
         "AHAB_INSTALL_DIR": target.as_posix(),
         failure: "1",
+        "AHAB_SKIP_ROOT": "1",
         "INSTALL_LOG": (checkout / "pip.log").as_posix(),
-        "AHAB_ALLOW_NONROOT": "1",
     }
     result = subprocess.run(
         [BASH, (checkout / "install.sh").as_posix(), "--python", fake_python.as_posix(), "--dev"],
@@ -147,18 +149,18 @@ def test_dev_failure_does_not_copy_config(checkout, fake_python, failure, tmp_pa
 
 
 @pytest.mark.skipif(
-    not BASH or sys.platform not in ("linux", "darwin"),
-    reason="Installer tests require Linux/macOS",
+    not BASH,
+    reason="Installer tests require bash and Linux/macOS (skipped on Windows without WSL)",
 )
 def test_dev_rejects_incompatible_venv(checkout, fake_python, tmp_path):
-    target = tmp_path / "opt" / "ahab"
+    target = tmp_path / "test-ahab"
     target.mkdir(parents=True)
     (target / ".venv").mkdir()
     env = {
         **os.environ,
         "AHAB_INSTALL_DIR": target.as_posix(),
+        "AHAB_SKIP_ROOT": "1",
         "INSTALL_LOG": (checkout / "pip.log").as_posix(),
-        "AHAB_ALLOW_NONROOT": "1",
     }
     result = subprocess.run(
         [BASH, (checkout / "install.sh").as_posix(), "--python", fake_python.as_posix(), "--dev"],
@@ -172,8 +174,8 @@ def test_dev_rejects_incompatible_venv(checkout, fake_python, tmp_path):
 
 
 @pytest.mark.skipif(
-    not BASH or sys.platform not in ("linux", "darwin"),
-    reason="Installer tests require Linux/macOS",
+    not BASH,
+    reason="Installer tests require bash and Linux/macOS (skipped on Windows without WSL)",
 )
 def test_remote_install(checkout, fake_python, tmp_path):
     # Create source tarball with full structure
@@ -201,7 +203,7 @@ def test_remote_install(checkout, fake_python, tmp_path):
     curl.chmod(0o755)
     home = tmp_path / "home"
     home.mkdir()
-    target = home / "opt" / "ahab"
+    target = home / "test-ahab"
     env = {
         **os.environ,
         "HOME": home.as_posix(),
@@ -209,7 +211,7 @@ def test_remote_install(checkout, fake_python, tmp_path):
         "AHAB_PYTHON": fake_python.as_posix(),
         "SOURCE_ARCHIVE": archive.as_posix(),
         "INSTALL_LOG": (tmp_path / "pip.log").as_posix(),
-        "AHAB_ALLOW_NONROOT": "1",
+        "AHAB_SKIP_ROOT": "1",
         "PATH": str(tools) + os.pathsep + os.environ["PATH"],
     }
     for _ in range(2):
@@ -231,11 +233,11 @@ def test_remote_install(checkout, fake_python, tmp_path):
 
 
 @pytest.mark.skipif(
-    not BASH or sys.platform not in ("linux", "darwin"),
-    reason="Installer tests require Linux/macOS",
+    not BASH,
+    reason="Installer tests require bash and Linux/macOS (skipped on Windows without WSL)",
 )
 def test_install_sh_rejects_non_root(checkout, fake_python):
-    # Use the fake python (which passes checks) but without AHAB_ALLOW_NONROOT
+    # Use the fake python (which passes checks) but without AHAB_SKIP_ROOT
     env = {**os.environ}
     result = subprocess.run(
         [BASH, (checkout / "install.sh").as_posix(), "--dev", "--python", fake_python.as_posix()],

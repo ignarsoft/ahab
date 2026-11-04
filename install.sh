@@ -9,6 +9,10 @@ ahab_install() (
     local root="/opt/ahab"
     local config_dir="/etc/ahab"
     local state_dir="/var/lib/ahab"
+    local skip_root=0
+    if [[ -n "${AHAB_SKIP_ROOT:-}" ]]; then
+        skip_root=1
+    fi
     local repo="${AHAB_REPOSITORY:-ignarsoft/ahab}"
     local ref="${AHAB_REF:-main}"
     local python="${AHAB_PYTHON:-}"
@@ -50,7 +54,20 @@ EOF
     done
 
     # --- require root ---
-    if [[ -z "${AHAB_ALLOW_NONROOT:-}" && $EUID -ne 0 ]]; then
+    # --- check for skip-root ---
+    if [[ -n "${AHAB_SKIP_ROOT:-}" ]]; then
+        skip_root=1
+    fi
+    # --- check for skip-root ---
+    if [[ -n "${AHAB_SKIP_ROOT:-}" ]]; then
+        skip_root=1
+    fi
+    # --- check for skip-root first ---
+    if [[ -n "${AHAB_SKIP_ROOT:-}" ]]; then
+        skip_root=1
+    fi
+    # --- require root (only if not skipping) ---
+    if [[ "$skip_root" -ne 1 && -z "${AHAB_ALLOW_NONROOT:-}" && $EUID -ne 0 ]]; then
         echo "This installer must run as root. Use: sudo bash install.sh" >&2
         exit 1
     fi
