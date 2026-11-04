@@ -15,47 +15,47 @@ and never creates networks or deletes instances.
 
 ## Setup
 
-**Linux / macOS / WSL** (Bash, curl, and tar)
+**Linux / macOS / WSL** (Bash, curl, tar, and sudo)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ignarsoft/ahab/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/ignarsoft/ahab/main/install.sh | sudo bash
 ```
 
-For WSL, run the command inside your Linux distribution. Keep the installation,
-Python environment, and OCI credentials in its Linux filesystem.
+For WSL, run the command inside your Linux distribution with systemd enabled.
 
-Installation is unattended and requires no administrator access, Git, or preinstalled
-Python. It downloads Ahab, uses Python 3.11+ if available, or installs a private Python
-3.13 runtime through uv. It then creates `.venv`, installs dependencies, and adds an
-`ahab` launcher. Existing configuration, credentials, and state are preserved.
+The installer runs as root and sets up:
+- Application in `/opt/ahab` (owned by root)
+- Configuration in `/etc/ahab/ahab.toml` and `/etc/ahab/notifications.env`
+- State and credentials in `/var/lib/ahab` (owned by the `ahab` user)
+- A system-wide `ahab` command in `/usr/local/bin`
+- Optional systemd service (enabled with `--systemd`)
 
-| Platform | Installation | Command |
-| --- | --- | --- |
-| Linux / macOS / WSL | `~/.local/share/ahab` | `~/.local/bin/ahab` |
-
-New terminals can use `ahab`; the installer adds `~/.local/bin` to
-`.profile`, `.bashrc`, and `.zshrc`.
-The launcher uses the installation directory so configuration and state stay consistent.
-
-Set `AHAB_INSTALL_DIR`, `AHAB_PYTHON`, `AHAB_REPOSITORY`, or `AHAB_REF` before installing
-to override the destination, Python executable, GitHub repository, or revision.
-Rerun the command to update. Stop any running hunter before updating.
+No manual PATH changes are needed. The installer uses Python 3.11+ if available,
+or installs a private Python 3.13 runtime via uv.
 
 These commands execute downloaded code. Review the installer first if needed.
-Downloads use GitHub, PyPI, and, when Python is missing, Astral's uv installer/runtime sources.
+Downloads use GitHub, PyPI, and, when Python is missing, Astral's uv sources.
 
-Installation does not start the hunter or provision cloud resources. Before use, supply
-an OCI API profile in `~/.oci/config`, an SSH public key, and an existing subnet.
-Run `ahab discover` to inspect available resources.
+Installation does not start the hunter or provision cloud resources. After installing,
+supply:
+- OCI API profile at `/var/lib/ahab/.oci/config`
+- SSH public key at `/var/lib/ahab/.ssh/id_ed25519.pub`
+- Subnet ID and SSH key path in `/etc/ahab/ahab.toml`
 
-Set `subnet_id` and `ssh_key_file` in the installation's `ahab.toml`. Optionally choose an `image_id`;
+Then run `ahab doctor` (read-only checks) and `ahab run` (starts hunting).
+
+Set `AHAB_PYTHON`, `AHAB_REPOSITORY`, or `AHAB_REF` before installing to override
+the Python executable, GitHub repository, or revision. The install location is fixed
+at `/opt/ahab`. Rerun the command to update. Stop any running hunter before updating.
+
+Set `subnet_id` and `ssh_key_file` in `/etc/ahab/ahab.toml`. Optionally choose an `image_id`;
 otherwise Ahab selects a compatible Ubuntu image and keeps it across restarts.
-Relative paths use the working directory. OCI API keys and SSH keys are separate.
+All paths in the configuration are absolute. OCI API keys and SSH keys are separate.
 
 ```bash
-ahab doctor          # Read-only checks.
-ahab run --dry-run   # Read-only checks.
-ahab run             # Can create a VM.
+ahab doctor          # Read-only checks
+ahab run --dry-run   # Read-only checks
+ahab run             # Can create a VM
 ```
 
 Use `--config PATH` to select another configuration file. Public SSH access also
@@ -103,43 +103,38 @@ AHAB_WEBHOOK_URL
 Webhooks require HTTPS and receive `text` and `content` fields. Tokens are not stored
 in TOML. Manual runs do not load `.env` files.
 
-## Linux service
+## systemd service (Linux)
 
-Requires systemd; on WSL, enable systemd in your distribution first.
-
-Install Ahab in `/opt/ahab/.venv` and create a dedicated `ahab` system user.
-Use `deploy/ahab.service` with:
-
-- Configuration: `/etc/ahab/ahab.toml`
-- Notification variables: `/etc/ahab/notifications.env` (mode `600`)
-- OCI profile and API key: `/var/lib/ahab/.oci/`
-- SSH public key: `/var/lib/ahab/.ssh/id_ed25519.pub`
-- `state_dir`: `/var/lib/ahab/state`, writable by `ahab`
-
-Set absolute paths in the configuration and OCI profile. The service cannot read
-`/home` directories. Keep application files root-owned and credentials private.
+The installer can enable the service automatically:
 
 ```bash
-sudo -u ahab /opt/ahab/.venv/bin/ahab doctor --config /etc/ahab/ahab.toml
-sudo cp deploy/ahab.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now ahab
-journalctl -u ahab -f
+curl -fsSL https://raw.githubusercontent.com/ignarsoft/ahab/main/install.sh | sudo bash -s -- --systemd
 ```
 
-The service stops after a result and retries only transient failures. Exit codes:
-`0` result, `1` error, `2` search limit, `75` transient failure, `130` interruption.
+Or run `sudo bash install.sh --systemd` after installation.
+
+This creates the `ahab` system user, installs the unit file, enables and starts the service.
+Logs: `journalctl -u ahab -f`
+
+The service runs as the `ahab` user with `/var/lib/ahab` as its home directory.
+Exit codes: `0` result, `1` error, `2` search limit, `75` transient failure, `130` interruption.
+Only transient failures are restarted; configuration and quota errors stay stopped.
 
 ## Development
 
-From a local checkout, run `bash install.sh --dev`.
-Local installs use the checkout's `.venv` and do not change PATH.
+From a local checkout:
 
 ```bash
-bash install.sh --dev
-.venv/bin/python -m pytest -q
-.venv/bin/ruff check ahab tests
-.venv/bin/ruff format --check ahab tests
+sudo bash install.sh --dev
+```
+
+This installs from the current directory (no download) and skips systemd setup.
+Local installs do not create the systemd service.
+
+```bash
+/opt/ahab/.venv/bin/python -m pytest -q
+/opt/ahab/.venv/bin/ruff check ahab tests
+/opt/ahab/.venv/bin/ruff format --check ahab tests
 ```
 
 Tests use mocks without Oracle credentials, including remote-installer download mocks.

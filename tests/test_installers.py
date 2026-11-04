@@ -1,6 +1,7 @@
 import os
 import shutil
 import subprocess
+import sys
 import tarfile
 from pathlib import Path
 
@@ -46,47 +47,121 @@ def fake_python(checkout):
 
 
 def install(checkout, fake_python, *args, **extra_env):
+    env = {
+        **os.environ,
+        "INSTALL_LOG": (checkout / "pip.log").as_posix(),
+        "AHAB_ALLOW_NONROOT": "1",
+        **extra_env,
+    }
     return subprocess.run(
-        [BASH, (checkout / "install.sh").as_posix(), "--python", fake_python.as_posix(), *args],
+        [
+            BASH,
+            (checkout / "install.sh").as_posix(),
+            "--python",
+            fake_python.as_posix(),
+            "--dev",
+            *args,
+        ],
         cwd=checkout.parent,
-        env={**os.environ, "INSTALL_LOG": (checkout / "pip.log").as_posix(), **extra_env},
+        env=env,
         text=True,
         capture_output=True,
     )
 
 
-@pytest.mark.skipif(not BASH, reason="Bash is unavailable")
-def test_shell_install_and_preserve_config(checkout, fake_python):
-    result = install(checkout, fake_python, "--dev")
+@pytest.mark.skipif(
+    not BASH or sys.platform not in ("linux", "darwin"),
+    reason="Installer tests require Linux/macOS",
+)
+def test_dev_install_preserves_config(checkout, fake_python, tmp_path):
+    # Install to a temp root
+    target = tmp_path / "opt" / "ahab"
+    env = {
+        **os.environ,
+        "AHAB_INSTALL_DIR": target.as_posix(),
+        "INSTALL_LOG": (checkout / "pip.log").as_posix(),
+        "AHAB_ALLOW_NONROOT": "1",
+    }
+    result = subprocess.run(
+        [BASH, (checkout / "install.sh").as_posix(), "--python", fake_python.as_posix(), "--dev"],
+        cwd=checkout.parent,
+        env=env,
+        text=True,
+        capture_output=True,
+    )
     assert result.returncode == 0, result.stderr
-    assert (checkout / ".venv/bin/python").exists()
-    config = checkout / "ahab.toml"
+    assert target.joinpath(".venv/bin/python").exists()
+    config = target / "ahab.toml"
     assert config.read_bytes() == (checkout / "ahab.example.toml").read_bytes()
     assert "[dev]" in (checkout / "pip.log").read_text(encoding="utf-8")
+
+    # Re-run preserves config
     config.write_text("custom settings", encoding="utf-8")
-    assert install(checkout, fake_python).returncode == 0
+    result = subprocess.run(
+        [BASH, (checkout / "install.sh").as_posix(), "--python", fake_python.as_posix(), "--dev"],
+        cwd=checkout.parent,
+        env=env,
+        text=True,
+        capture_output=True,
+    )
+    assert result.returncode == 0
     assert config.read_text(encoding="utf-8") == "custom settings"
-    assert not (checkout / "state").exists()
 
 
-@pytest.mark.skipif(not BASH, reason="Bash is unavailable")
+@pytest.mark.skipif(
+    not BASH or sys.platform not in ("linux", "darwin"),
+    reason="Installer tests require Linux/macOS",
+)
 @pytest.mark.parametrize("failure", ["FAIL_VERSION", "FAIL_INSTALL"])
-def test_shell_failure_does_not_copy_config(checkout, fake_python, failure):
-    result = install(checkout, fake_python, **{failure: "1"})
+def test_dev_failure_does_not_copy_config(checkout, fake_python, failure, tmp_path):
+    target = tmp_path / "opt" / "ahab"
+    env = {
+        **os.environ,
+        "AHAB_INSTALL_DIR": target.as_posix(),
+        failure: "1",
+        "INSTALL_LOG": (checkout / "pip.log").as_posix(),
+    }
+    result = subprocess.run(
+        [BASH, (checkout / "install.sh").as_posix(), "--python", fake_python.as_posix(), "--dev"],
+        cwd=checkout.parent,
+        env=env,
+        text=True,
+        capture_output=True,
+    )
     assert result.returncode != 0
-    assert not (checkout / "ahab.toml").exists()
+    assert not (target / "ahab.toml").exists()
 
 
-@pytest.mark.skipif(not BASH, reason="Bash is unavailable")
-def test_shell_rejects_incompatible_venv(checkout, fake_python):
-    (checkout / ".venv").mkdir()
-    result = install(checkout, fake_python)
+@pytest.mark.skipif(
+    not BASH or sys.platform not in ("linux", "darwin"),
+    reason="Installer tests require Linux/macOS",
+)
+def test_dev_rejects_incompatible_venv(checkout, fake_python, tmp_path):
+    target = tmp_path / "opt" / "ahab"
+    target.mkdir(parents=True)
+    (target / ".venv").mkdir()
+    env = {
+        **os.environ,
+        "AHAB_INSTALL_DIR": target.as_posix(),
+        "INSTALL_LOG": (checkout / "pip.log").as_posix(),
+        "AHAB_ALLOW_NONROOT": "1",
+    }
+    result = subprocess.run(
+        [BASH, (checkout / "install.sh").as_posix(), "--python", fake_python.as_posix(), "--dev"],
+        cwd=checkout.parent,
+        env=env,
+        text=True,
+        capture_output=True,
+    )
     assert result.returncode != 0
     assert "Existing .venv is incompatible" in result.stderr
 
 
-@pytest.mark.skipif(not BASH, reason="Bash is unavailable")
-def test_piped_shell_remote_install(checkout, fake_python, tmp_path):
+@pytest.mark.skipif(
+    not BASH or sys.platform not in ("linux", "darwin"),
+    reason="Installer tests require Linux/macOS",
+)
+def test_remote_install(checkout, fake_python, tmp_path):
     source = checkout / "ahab"
     source.mkdir()
     (source / "__init__.py").write_text("", encoding="utf-8")
@@ -104,7 +179,7 @@ def test_piped_shell_remote_install(checkout, fake_python, tmp_path):
     curl.chmod(0o755)
     home = tmp_path / "home"
     home.mkdir()
-    target = home / "installed app"
+    target = home / "opt" / "ahab"
     env = {
         **os.environ,
         "HOME": home.as_posix(),
@@ -112,6 +187,7 @@ def test_piped_shell_remote_install(checkout, fake_python, tmp_path):
         "AHAB_PYTHON": fake_python.as_posix(),
         "SOURCE_ARCHIVE": archive.as_posix(),
         "INSTALL_LOG": (tmp_path / "pip.log").as_posix(),
+        "AHAB_ALLOW_NONROOT": "1",
         "PATH": str(tools) + os.pathsep + os.environ["PATH"],
     }
     for _ in range(2):
@@ -128,6 +204,19 @@ def test_piped_shell_remote_install(checkout, fake_python, tmp_path):
         if config.read_text(encoding="utf-8") != "custom settings":
             assert config.read_bytes() == (checkout / "ahab.example.toml").read_bytes()
             config.write_text("custom settings", encoding="utf-8")
-    assert (home / ".local/bin/ahab").exists()
-    assert (home / ".bashrc").read_text(encoding="utf-8").count("# Ahab PATH") == 1
+    assert (target / ".venv/bin/python").exists()
     assert not (target / "state").exists()
+
+
+@pytest.mark.skipif(
+    not BASH or sys.platform not in ("linux", "darwin"),
+    reason="Installer tests require Linux/macOS",
+)
+def test_install_sh_rejects_non_root():
+    result = subprocess.run(
+        [BASH, (ROOT / "install.sh").as_posix(), "--dev", "--python", "python3"],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode != 0
+    assert "must run as root" in result.stderr
