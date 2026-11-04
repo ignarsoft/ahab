@@ -1,0 +1,26 @@
+oci_config = "~/.oci/config"
+profile = "DEFAULT"
+compartment_id = "" # Empty uses the tenancy root.
+
+subnet_id = "" # Select an existing subnet with discover.
+image_id = "" # Empty selects a compatible image, pinned across restarts.
+operating_system = "Canonical Ubuntu"
+os_version = "24.04"
+ssh_key_file = "~/.ssh/id_ed25519.pub"
+
+display_name = "ahab-a1"
+hunter_id = "ahab-a1"
+ocpus = 2
+memory_gb = 12
+boot_volume_gb = 50
+assign_public_ip = true
+availability_domains = [] # Empty uses all compatible ADs.
+
+capacity_mode = "auto" # auto, required, or off
+interval_seconds = 120
+jitter_seconds = 30
+max_backoff_seconds = 900 # Retry-After may exceed this limit.
+max_attempts = 0 # Search cycles; 0 means unlimited.
+deadline_hours = 0 # Measured across restarts; 0 means unlimited.
+wait_timeout_seconds = 600
+state_dir = "./state" # Use an absolute path with systemd.

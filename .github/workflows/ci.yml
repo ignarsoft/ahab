@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    container: ubuntu:24.04
+    steps:
+      - name: Install download tools
+        run: apt-get update && apt-get install -y --no-install-recommends curl ca-certificates git
+      - uses: actions/checkout@v4
+      - name: Install without system Python
+        run: |
+          bash install.sh --dev
+          .venv/bin/python -m pytest -q
+          .venv/bin/ahab --help
+
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python: ['3.13']
+        include:
+          - os: ubuntu-latest
+            python: '3.11'
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install on Unix
+        if: runner.os != 'Windows'
+        run: bash install.sh --dev
+      - name: Install on Windows
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: ./install.ps1 -Dev
+      - name: Test and lint
+        shell: bash
+        run: |
+          if [[ "$RUNNER_OS" == Windows ]]; then
+            PYTHON=.venv/Scripts/python
+          else
+            PYTHON=.venv/bin/python
+          fi
+          "$PYTHON" -m pytest -q
+          "$PYTHON" -m ruff check ahab tests
+          "$PYTHON" -m ruff format --check ahab tests
+          "$PYTHON" -m ahab.cli --help
+          bash -n install.sh
