@@ -13,8 +13,10 @@ BASH = shutil.which("bash")
 
 @pytest.fixture
 def checkout(tmp_path):
+    """Create a minimal repo checkout with all required directories."""
     directory = tmp_path / "checkout with spaces"
     directory.mkdir()
+    # Files
     for name in (
         "install.sh",
         "ahab.example.toml",
@@ -23,15 +25,27 @@ def checkout(tmp_path):
         "LICENSE",
     ):
         shutil.copy2(ROOT / name, directory / name)
+    # Directories needed by installer
+    (directory / "ahab").mkdir()
+    (directory / "ahab" / "__init__.py").write_text("", encoding="utf-8")
+    (directory / "deploy").mkdir()
+    (directory / "deploy" / "ahab.service").write_text(
+        "[Unit]\nDescription=Test\n[Service]\nExecStart=/bin/true\n[Install]\nWantedBy=multi-user.target\n",
+        encoding="utf-8",
+    )
     return directory
 
 
 @pytest.fixture
 def fake_python(checkout):
+    """A fake Python that passes version/platform checks and mocks venv/pip."""
     path = checkout / "fake python"
     path.write_text(
         "#!/usr/bin/env bash\n"
-        'if [[ "$1" == -c ]]; then exit "${FAIL_VERSION:-0}"; fi\n'
+        'if [[ "$1" == -c ]]; then\n'
+        '  if [[ "$2" == "import venv, ensurepip" ]]; then exit 0; fi\n'
+        '  exit "${FAIL_VERSION:-0}";\n'
+        "fi\n"
         'if [[ "$2" == venv ]]; then\n'
         '  mkdir -p "$3/bin"\n'
         '  cp "$0" "$3/bin/python"\n'
@@ -74,7 +88,6 @@ def install(checkout, fake_python, *args, **extra_env):
     reason="Installer tests require Linux/macOS",
 )
 def test_dev_install_preserves_config(checkout, fake_python, tmp_path):
-    # Install to a temp root
     target = tmp_path / "opt" / "ahab"
     env = {
         **os.environ,
@@ -120,6 +133,7 @@ def test_dev_failure_does_not_copy_config(checkout, fake_python, failure, tmp_pa
         "AHAB_INSTALL_DIR": target.as_posix(),
         failure: "1",
         "INSTALL_LOG": (checkout / "pip.log").as_posix(),
+        "AHAB_ALLOW_NONROOT": "1",
     }
     result = subprocess.run(
         [BASH, (checkout / "install.sh").as_posix(), "--python", fake_python.as_posix(), "--dev"],
@@ -162,12 +176,20 @@ def test_dev_rejects_incompatible_venv(checkout, fake_python, tmp_path):
     reason="Installer tests require Linux/macOS",
 )
 def test_remote_install(checkout, fake_python, tmp_path):
+    # Create source tarball with full structure
     source = checkout / "ahab"
-    source.mkdir()
+    source.mkdir(exist_ok=True)
     (source / "__init__.py").write_text("", encoding="utf-8")
     archive = tmp_path / "source.tar.gz"
     with tarfile.open(archive, "w:gz") as output:
-        for name in ("ahab", "pyproject.toml", "ahab.example.toml", "README.md", "LICENSE"):
+        for name in (
+            "ahab",
+            "deploy",
+            "pyproject.toml",
+            "ahab.example.toml",
+            "README.md",
+            "LICENSE",
+        ):
             output.add(checkout / name, arcname=f"snapshot/{name}")
     tools = tmp_path / "tools"
     tools.mkdir()
@@ -212,11 +234,15 @@ def test_remote_install(checkout, fake_python, tmp_path):
     not BASH or sys.platform not in ("linux", "darwin"),
     reason="Installer tests require Linux/macOS",
 )
-def test_install_sh_rejects_non_root():
+def test_install_sh_rejects_non_root(checkout, fake_python):
+    # Use the fake python (which passes checks) but without AHAB_ALLOW_NONROOT
+    env = {**os.environ}
     result = subprocess.run(
-        [BASH, (ROOT / "install.sh").as_posix(), "--dev", "--python", "python3"],
-        capture_output=True,
+        [BASH, (checkout / "install.sh").as_posix(), "--dev", "--python", fake_python.as_posix()],
+        cwd=checkout.parent,
+        env=env,
         text=True,
+        capture_output=True,
     )
     assert result.returncode != 0
     assert "must run as root" in result.stderr
