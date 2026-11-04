@@ -113,11 +113,13 @@ EOF
     if [[ "$remote" -eq 1 ]]; then
         mkdir -p "$root/ahab"
         cp -R "$source_dir/ahab/." "$root/ahab/"
+        cp -R "$source_dir/deploy" "$root/deploy"
         cp "$source_dir/pyproject.toml" "$source_dir/ahab.example.toml" \
            "$source_dir/README.md" "$source_dir/LICENSE" "$root/"
     else
         # local dev: copy from checkout
         cp -R "$source_dir/ahab/." "$root/ahab/"
+        cp -R "$source_dir/deploy" "$root/deploy"
         cp "$source_dir/pyproject.toml" "$source_dir/ahab.example.toml" \
            "$source_dir/README.md" "$source_dir/LICENSE" "$root/"
     fi
@@ -197,39 +199,8 @@ EOF
         chown -R ahab:ahab "$state_dir"
         chmod 700 "$state_dir"
 
-        # install unit file
-        cat > /etc/systemd/system/ahab.service <<'EOF'
-[Unit]
-Description=Ahab Oracle A1 capacity hunter
-Wants=network-online.target
-After=network-online.target
-StartLimitIntervalSec=0
-
-[Service]
-Type=simple
-User=ahab
-Group=ahab
-WorkingDirectory=/opt/ahab
-Environment=HOME=/var/lib/ahab
-Environment=PYTHONUNBUFFERED=1
-EnvironmentFile=-/etc/ahab/notifications.env
-ExecStart=/opt/ahab/.venv/bin/ahab run --config /etc/ahab/ahab.toml
-# Only retry transient startup/read failures. Configuration/quota errors stay stopped.
-Restart=on-failure
-RestartPreventExitStatus=1 2 130
-RestartSec=120
-StateDirectory=ahab
-UMask=0077
-NoNewPrivileges=true
-PrivateTmp=true
-ProtectSystem=strict
-ProtectHome=true
-ReadWritePaths=/var/lib/ahab
-TimeoutStopSec=20
-
-[Install]
-WantedBy=multi-user.target
-EOF
+        # install unit file from deploy/
+        cp "$root/deploy/ahab.service" /etc/systemd/system/ahab.service
 
         systemctl daemon-reload
         systemctl enable --now ahab
