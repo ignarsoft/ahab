@@ -15,17 +15,14 @@ and never creates networks or deletes instances.
 
 ## Setup
 
-**Linux / macOS** (Bash, curl, and tar)
+**Linux / macOS / WSL** (Bash, curl, and tar)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/ignarsoft/ahab/main/install.sh | bash
 ```
 
-**Windows** (PowerShell 5.1+)
-
-```powershell
-irm https://raw.githubusercontent.com/ignarsoft/ahab/main/install.ps1 | iex
-```
+For WSL, run the command inside your Linux distribution. Keep the installation,
+Python environment, and OCI credentials in its Linux filesystem.
 
 Installation is unattended and requires no administrator access, Git, or preinstalled
 Python. It downloads Ahab, uses Python 3.11+ if available, or installs a private Python
@@ -34,11 +31,10 @@ Python. It downloads Ahab, uses Python 3.11+ if available, or installs a private
 
 | Platform | Installation | Command |
 | --- | --- | --- |
-| Linux / macOS | `~/.local/share/ahab` | `~/.local/bin/ahab` |
-| Windows | `%LOCALAPPDATA%\Ahab` | `ahab` |
+| Linux / macOS / WSL | `~/.local/share/ahab` | `~/.local/bin/ahab` |
 
-On Linux/macOS, new terminals can use `ahab`; the installer adds `~/.local/bin` to
-`.profile`, `.bashrc`, and `.zshrc`. On Windows, it updates the current and user PATH.
+New terminals can use `ahab`; the installer adds `~/.local/bin` to
+`.profile`, `.bashrc`, and `.zshrc`.
 The launcher uses the installation directory so configuration and state stay consistent.
 
 Set `AHAB_INSTALL_DIR`, `AHAB_PYTHON`, `AHAB_REPOSITORY`, or `AHAB_REF` before installing
@@ -109,6 +105,8 @@ in TOML. Manual runs do not load `.env` files.
 
 ## Linux service
 
+Requires systemd; on WSL, enable systemd in your distribution first.
+
 Install Ahab in `/opt/ahab/.venv` and create a dedicated `ahab` system user.
 Use `deploy/ahab.service` with:
 
@@ -134,8 +132,7 @@ The service stops after a result and retries only transient failures. Exit codes
 
 ## Development
 
-From a local checkout, run `bash install.sh --dev` or
-`powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -Dev`.
+From a local checkout, run `bash install.sh --dev`.
 Local installs use the checkout's `.venv` and do not change PATH.
 
 ```bash
@@ -146,8 +143,8 @@ bash install.sh --dev
 ```
 
 Tests use mocks without Oracle credentials, including remote-installer download mocks.
-CI tests installation on Linux, macOS, and Windows. Live cloud provisioning and the
-systemd unit are not covered.
+CI tests installation on Linux and macOS. WSL uses the Linux installer; dedicated WSL,
+live cloud provisioning, and systemd tests are not included.
 
 ## License
 

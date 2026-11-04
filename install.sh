@@ -29,10 +29,12 @@ ahab_install() (
     trap 'rm -rf -- "$temp"' EXIT
 
     download() { curl --fail --show-error --silent --location --retry 3 --proto '=https' --tlsv1.2 "$1" -o "$2"; }
-    supported_python() { "$1" -c 'import sys; sys.exit(sys.version_info < (3, 11))' >/dev/null 2>&1; }
+    supported_python() {
+        "$1" -c 'import sys; sys.exit(sys.version_info < (3, 11) or sys.platform not in ("linux", "darwin"))' >/dev/null 2>&1
+    }
 
     if [[ -n "$python" ]]; then
-        supported_python "$python" || { echo 'Python 3.11+ is required.' >&2; exit 1; }
+        supported_python "$python" || { echo 'A Linux or macOS Python 3.11+ interpreter is required.' >&2; exit 1; }
     else
         for candidate in python3 python python3.14 python3.13 python3.12 python3.11; do
             if command -v "$candidate" >/dev/null 2>&1 && supported_python "$candidate"; then

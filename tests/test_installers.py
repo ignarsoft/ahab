@@ -1,16 +1,13 @@
 import os
 import shutil
 import subprocess
-import sys
 import tarfile
-import zipfile
 from pathlib import Path
 
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 BASH = shutil.which("bash")
-POWERSHELL = shutil.which("pwsh") or shutil.which("powershell")
 
 
 @pytest.fixture
@@ -19,7 +16,6 @@ def checkout(tmp_path):
     directory.mkdir()
     for name in (
         "install.sh",
-        "install.ps1",
         "ahab.example.toml",
         "pyproject.toml",
         "README.md",
@@ -135,131 +131,3 @@ def test_piped_shell_remote_install(checkout, fake_python, tmp_path):
     assert (home / ".local/bin/ahab").exists()
     assert (home / ".bashrc").read_text(encoding="utf-8").count("# Ahab PATH") == 1
     assert not (target / "state").exists()
-
-
-@pytest.mark.skipif(not POWERSHELL or os.name != "nt", reason="Windows PowerShell required")
-def test_iex_remote_install(tmp_path):
-    target = tmp_path / "installed app"
-    subprocess.run(
-        [sys.executable, "-m", "venv", "--without-pip", str(target / ".venv")], check=True
-    )
-    modules = tmp_path / "modules"
-    modules.mkdir()
-    (modules / "pip.py").write_text("", encoding="utf-8")
-    archive = tmp_path / "source.zip"
-    with zipfile.ZipFile(archive, "w") as output:
-        for name in (
-            "pyproject.toml",
-            "ahab.example.toml",
-            "ahab/__init__.py",
-            "README.md",
-            "LICENSE",
-        ):
-            output.write(ROOT / name, f"snapshot/{name}")
-    # Keep the user PATH unchanged while exercising the remote extraction and launcher.
-    bin_dir = str(target / "bin")
-    old_path = os.environ["PATH"]
-    command = (
-        "function Invoke-WebRequest { param($UseBasicParsing, $Uri, $OutFile) "
-        "Copy-Item $env:SOURCE_ARCHIVE $OutFile }; "
-        '$old = [Environment]::GetEnvironmentVariable("Path", "User"); '
-        'try { [Environment]::SetEnvironmentVariable("Path", $env:TEST_BIN, "User"); '
-        "Get-Content -Raw $env:INSTALLER | Invoke-Expression } "
-        'finally { [Environment]::SetEnvironmentVariable("Path", $old, "User") }'
-    ).replace("param($UseBasicParsing,", "param([switch]$UseBasicParsing,")
-    result = subprocess.run(
-        [POWERSHELL, "-NoProfile", "-Command", command],
-        env={
-            **os.environ,
-            "AHAB_INSTALL_DIR": str(target),
-            "AHAB_PYTHON": sys.executable,
-            "SOURCE_ARCHIVE": str(archive),
-            "INSTALLER": str(ROOT / "install.ps1"),
-            "PYTHONPATH": str(modules),
-            "TEST_BIN": bin_dir,
-            "PATH": old_path,
-        },
-        text=True,
-        capture_output=True,
-    )
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert (target / "ahab.toml").exists()
-    assert (target / "bin/ahab.cmd").exists()
-    assert not (target / "state").exists()
-
-
-@pytest.mark.skipif(not POWERSHELL, reason="PowerShell is unavailable")
-def test_powershell_syntax():
-    script = ROOT / "install.ps1"
-    command = (
-        "$tokens = $null; $errors = $null; "
-        "[System.Management.Automation.Language.Parser]::ParseFile("
-        f"'{str(script).replace(chr(39), chr(39) * 2)}', [ref]$tokens, [ref]$errors) > $null; "
-        "if ($errors.Count) { $errors; exit 1 }"
-    )
-    result = subprocess.run(
-        [POWERSHELL, "-NoProfile", "-Command", command], capture_output=True, text=True
-    )
-    assert result.returncode == 0, result.stdout + result.stderr
-
-
-@pytest.mark.skipif(not POWERSHELL or os.name != "nt", reason="Windows PowerShell required")
-def test_powershell_install_and_preserve_config(checkout):
-    subprocess.run(
-        [sys.executable, "-m", "venv", "--without-pip", str(checkout / ".venv")], check=True
-    )
-    modules = checkout / "fake modules"
-    modules.mkdir()
-    (modules / "pip.py").write_text(
-        "import os, sys\n"
-        "from pathlib import Path\n"
-        'Path(os.environ["INSTALL_LOG"]).write_text(repr(sys.argv), encoding="utf-8")\n'
-        'sys.exit(int(os.environ.get("FAIL_INSTALL", "0")))\n',
-        encoding="utf-8",
-    )
-    command = [
-        POWERSHELL,
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        str(checkout / "install.ps1"),
-        "-Python",
-        sys.executable,
-        "-Dev",
-    ]
-    env = {**os.environ, "PYTHONPATH": str(modules), "INSTALL_LOG": str(checkout / "pip.log")}
-    result = subprocess.run(command, env=env, capture_output=True, text=True)
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert "[dev]" in (checkout / "pip.log").read_text(encoding="utf-8")
-    config = checkout / "ahab.toml"
-    assert config.read_bytes() == (checkout / "ahab.example.toml").read_bytes()
-    config.write_text("custom settings", encoding="utf-8")
-    assert subprocess.run(command, env=env, capture_output=True).returncode == 0
-    assert config.read_text(encoding="utf-8") == "custom settings"
-    assert (
-        subprocess.run(command, env={**env, "FAIL_INSTALL": "1"}, capture_output=True).returncode
-        != 0
-    )
-    assert config.read_text(encoding="utf-8") == "custom settings"
-
-
-@pytest.mark.skipif(not POWERSHELL, reason="PowerShell is unavailable")
-def test_powershell_rejects_missing_python(checkout):
-    result = subprocess.run(
-        [
-            POWERSHELL,
-            "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            str(checkout / "install.ps1"),
-            "-Python",
-            "ahab-python-not-found",
-        ],
-        capture_output=True,
-        text=True,
-    )
-    assert result.returncode != 0
-    assert not (checkout / ".venv").exists()
-    assert not (checkout / "ahab.toml").exists()
