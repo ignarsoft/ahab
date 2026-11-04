@@ -35,6 +35,8 @@ jobs:
           python-version: ${{ matrix.python }}
       - name: Install
         run: sudo bash install.sh --dev
+      - name: Fix permissions
+        run: sudo chmod -R a+rX /opt/ahab/.venv
       - name: Test and lint
         shell: bash
         run: |
