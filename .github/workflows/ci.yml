@@ -18,9 +18,8 @@ jobs:
       - name: Install without system Python
         run: |
           bash install.sh --dev
-          cd /opt/ahab
-          .venv/bin/python -m pytest -q
-          .venv/bin/ahab --help
+          /opt/ahab/.venv/bin/python -m pytest -q
+          /opt/ahab/.venv/bin/ahab --help
 
   test:
     strategy:
@@ -42,8 +41,7 @@ jobs:
       - name: Test and lint
         shell: bash
         run: |
-          cd /opt/ahab
-          PYTHON=.venv/bin/python
+          PYTHON=/opt/ahab/.venv/bin/python
           "$PYTHON" -m pytest -q
           "$PYTHON" -m ruff check ahab tests
           "$PYTHON" -m ruff format --check ahab tests

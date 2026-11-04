@@ -159,8 +159,8 @@ EOF
 
     if [[ ! -e "$config_dir/ahab.toml" ]]; then
         cp "$root/ahab.example.toml" "$config_dir/ahab.toml"
-        # Update state_dir to absolute path
-        sed -i 's|^state_dir = .*|state_dir = "/var/lib/ahab/state"|' "$config_dir/ahab.toml"
+        # Update state_dir to absolute path (portable sed)
+        sed 's|^state_dir = .*|state_dir = "/var/lib/ahab/state"|' "$config_dir/ahab.toml" > "$config_dir/ahab.toml.tmp" && mv "$config_dir/ahab.toml.tmp" "$config_dir/ahab.toml"
     fi
 
     # --- notifications template ---
