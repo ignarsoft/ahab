@@ -18,6 +18,7 @@ jobs:
       - name: Install without system Python
         run: |
           bash install.sh --dev
+          cd /opt/ahab
           .venv/bin/python -m pytest -q
           .venv/bin/ahab --help
 
@@ -37,10 +38,11 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - name: Install
-        run: bash install.sh --dev
+        run: sudo bash install.sh --dev
       - name: Test and lint
         shell: bash
         run: |
+          cd /opt/ahab
           PYTHON=.venv/bin/python
           "$PYTHON" -m pytest -q
           "$PYTHON" -m ruff check ahab tests
