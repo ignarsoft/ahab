@@ -1,10 +1,32 @@
 import json
 import logging
 import os
+from pathlib import Path
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 LOG = logging.getLogger(__name__)
+
+
+def load_environment(path):
+    """Load literal notification settings, never shell code or substitutions."""
+    allowed = {"TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "AHAB_WEBHOOK_URL"}
+    values = {}
+    for number, line in enumerate(Path(path).read_text(encoding="utf-8").splitlines(), 1):
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        key, separator, value = line.partition("=")
+        key, value = key.strip(), value.strip()
+        if not separator or key not in allowed or key in values:
+            raise ValueError(f"Invalid notification setting at line {number}")
+        if value.startswith(("'", '"')):
+            if len(value) < 2 or value[-1] != value[0]:
+                raise ValueError(f"Invalid notification quoting at line {number}")
+            value = value[1:-1]
+        values[key] = value
+    for key, value in values.items():
+        os.environ.setdefault(key, value)
 
 
 def validate_environment():

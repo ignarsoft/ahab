@@ -11,8 +11,7 @@ Group=ahab
 WorkingDirectory=/opt/ahab
 Environment=HOME=/var/lib/ahab
 Environment=PYTHONUNBUFFERED=1
-EnvironmentFile=-/etc/ahab/notifications.env
-ExecStart=/opt/ahab/.venv/bin/ahab run --config /etc/ahab/ahab.toml
+ExecStart=/opt/ahab/.venv/bin/ahab run --config /etc/ahab/ahab.toml --env-file /etc/ahab/notifications.env
 # Only retry transient startup/read failures. Configuration/quota errors stay stopped.
 Restart=on-failure
 RestartPreventExitStatus=1 2 130

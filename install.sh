@@ -235,7 +235,7 @@ elif [[ \$EUID -ne 0 ]]; then
 fi
 export HOME="$state_dir"
 cd -- "$root" || exit 1
-exec "$root/.venv/bin/ahab" --config "$config_dir/ahab.toml" "\$@"
+exec "$root/.venv/bin/ahab" --config "$config_dir/ahab.toml" --env-file "$config_dir/notifications.env" "\$@"
 EOF
     chmod 755 "$bin_dir/ahab"
 
@@ -252,9 +252,9 @@ EOF
         chown -R ahab:ahab "$state_dir"
         chmod 700 "$state_dir"
 
-        chown root:ahab "$config_dir" "$config_dir/ahab.toml"
+        chown root:ahab "$config_dir" "$config_dir/ahab.toml" "$config_dir/notifications.env"
         chmod 750 "$config_dir"
-        chmod 640 "$config_dir/ahab.toml"
+        chmod 640 "$config_dir/ahab.toml" "$config_dir/notifications.env"
 
         # install unit file from deploy/
         install -m 644 "$root/deploy/ahab.service" /etc/systemd/system/ahab.service

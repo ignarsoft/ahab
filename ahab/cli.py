@@ -9,7 +9,7 @@ import portalocker
 
 from .config import Config
 from .engine import Engine, FatalError, classify
-from .notify import send, validate_environment
+from .notify import load_environment, send, validate_environment
 from .oracle import Oracle
 from .storage import Store
 
@@ -20,6 +20,7 @@ def main():
     parser = argparse.ArgumentParser(description="Ahab - OCI A1 hunter")
     parser.add_argument("command", choices=("discover", "doctor", "run"))
     parser.add_argument("--config", default="ahab.toml", help="TOML file (default: ahab.toml)")
+    parser.add_argument("--env-file", help="Literal notification KEY=value file")
     parser.add_argument(
         "--dry-run", action="store_true", help="Read-only checks; no resources created"
     )
@@ -30,6 +31,8 @@ def main():
     signal.signal(signal.SIGTERM, lambda *_: (_ for _ in ()).throw(KeyboardInterrupt()))
     try:
         config = Config.load(args.config)
+        if args.env_file:
+            load_environment(args.env_file)
         validate_environment()
         api = Oracle(config)
         if args.command == "discover":
