@@ -20,7 +20,8 @@ ahab_install() (
     local ref="${AHAB_REF:-main}"
     local python="${AHAB_PYTHON:-}"
     local dev=0
-    local with_systemd=0
+    local with_systemd=-1
+    local start_service=0
     local remote=1
 
     # --- arg parsing ---
@@ -30,6 +31,7 @@ ahab_install() (
             --dev) dev=1; remote=0; shift ;;
             --systemd) with_systemd=1; shift ;;
             --no-systemd) with_systemd=0; shift ;;
+            --start) start_service=1; shift ;;
             -h|--help)
                 cat <<'EOF'
 Usage: sudo bash install.sh [options]
@@ -39,8 +41,9 @@ Installs Ahab to /opt/ahab with configuration in /etc/ahab and state in /var/lib
 Options:
   --python PATH       Use this Python interpreter (must be 3.11+ on Linux/macOS)
   --dev               Install from current directory (no download), skip systemd setup
-  --systemd           Enable and start systemd service after install (Linux only)
-  --no-systemd        Do not configure systemd (default)
+  --systemd           Install systemd service without starting it (Linux only)
+  --start             With --systemd, validate, enable and start the hunter
+  --no-systemd        Do not configure systemd or prompt
   -h, --help          Show this help
 
 Environment overrides:
@@ -57,6 +60,10 @@ EOF
         esac
     done
 
+    if [[ "$start_service" -eq 1 && "$with_systemd" -ne 1 ]]; then
+        echo '--start requires --systemd; starting can create a VM.' >&2
+        exit 1
+    fi
     if [[ -n "$dest" && "$with_systemd" -eq 1 ]]; then
         echo 'Systemd setup is unavailable with DESTDIR.' >&2
         exit 1
@@ -83,6 +90,27 @@ EOF
     platform="$(uname -s)"
     if [[ "$platform" != "Linux" && "$platform" != "Darwin" ]]; then
         echo "Supported platforms: Linux, macOS (and WSL on Windows)." >&2
+        exit 1
+    fi
+
+    local systemd_available=0
+    if [[ "$platform" == Linux && -d /run/systemd/system ]] && command -v systemctl >/dev/null 2>&1; then
+        systemd_available=1
+    fi
+    if [[ "$with_systemd" -eq -1 ]]; then
+        with_systemd=0
+        if [[ -z "$dest" && "$dev" -eq 0 && "$systemd_available" -eq 1 && -t 1 && -t 2 ]]; then
+            local reply
+            read -r -p 'Install the systemd service? [y/N] ' reply </dev/tty || reply=n
+            case "$reply" in y|Y|yes) with_systemd=1 ;; esac
+        fi
+    fi
+    if [[ "$with_systemd" -eq 1 && "$systemd_available" -ne 1 ]]; then
+        echo 'Systemd is not running on this host. Use --no-systemd.' >&2
+        exit 1
+    fi
+    if [[ -z "$dest" && "$systemd_available" -eq 1 ]] && systemctl is-active --quiet ahab; then
+        echo 'Stop the running hunter before updating: sudo systemctl stop ahab' >&2
         exit 1
     fi
 
@@ -229,11 +257,21 @@ EOF
         chmod 640 "$config_dir/ahab.toml"
 
         # install unit file from deploy/
-        cp "$root/deploy/ahab.service" /etc/systemd/system/ahab.service
+        install -m 644 "$root/deploy/ahab.service" /etc/systemd/system/ahab.service
 
         systemctl daemon-reload
-        systemctl enable --now ahab
-        echo "systemd service enabled and started. View logs: journalctl -u ahab -f"
+        echo 'Systemd service installed; it has not been started.'
+        if [[ "$start_service" -eq 0 && -t 1 && -t 2 ]]; then
+            local reply
+            read -r -p 'Validate, enable and start hunting now (can create a VM)? [y/N] ' reply </dev/tty || reply=n
+            case "$reply" in y|Y|yes) start_service=1 ;; esac
+        fi
+        if [[ "$start_service" -eq 1 ]]; then
+            echo 'Checking configuration and OCI access as the service user...'
+            "$bin_dir/ahab" doctor
+            systemctl enable --now ahab
+            echo 'Service enabled and started. View logs: journalctl -u ahab -f'
+        fi
     fi
 
     # --- summary ---

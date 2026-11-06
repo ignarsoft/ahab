@@ -169,6 +169,12 @@ def test_install_sh_rejects_non_root():
     assert "must run as root" in result.stderr
 
 
+def test_start_requires_explicit_systemd(sandbox):
+    result = install(sandbox, "--start")
+    assert result.returncode != 0
+    assert "--start requires --systemd" in result.stderr
+
+
 def test_staging_rejects_systemd(sandbox):
     result = install(sandbox, "--systemd")
     assert result.returncode != 0
