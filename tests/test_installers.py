@@ -68,6 +68,10 @@ def test_dev_install_preserves_config(sandbox):
     assert result.returncode == 0, result.stdout + result.stderr
     assert (app / ".venv/bin/python").exists()
     assert 'state_dir = "/var/lib/ahab/state"' in config.read_text()
+    assert 'oci_config = "/var/lib/ahab/.oci/config"' in config.read_text()
+    assert 'ssh_key_file = "/var/lib/ahab/.ssh/id_ed25519.pub"' in config.read_text()
+    for directory in (".oci", ".ssh"):
+        assert (stage / "var/lib/ahab" / directory).stat().st_mode & 0o077 == 0
     assert "[dev]" in Path(env["INSTALL_LOG"]).read_text()
     assert config.stat().st_mode & 0o077 == 0
     assert app.stat().st_mode & 0o005 == 0o005

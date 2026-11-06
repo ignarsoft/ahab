@@ -160,13 +160,17 @@ EOF
     # --- configuration directory ---
     echo "Setting up configuration in $config_dir..."
     mkdir -p "$config_dir"
-    mkdir -p "$state_dir"
-    chmod 700 "$state_dir"
+    mkdir -p "$state_dir/.oci" "$state_dir/.ssh"
+    chmod 700 "$state_dir" "$state_dir/.oci" "$state_dir/.ssh"
 
     if [[ ! -e "$config_dir/ahab.toml" ]]; then
         cp "$root/ahab.example.toml" "$config_dir/ahab.toml"
-        # Update state_dir to absolute path (portable sed)
-        sed 's|^state_dir = .*|state_dir = "/var/lib/ahab/state"|' "$config_dir/ahab.toml" > "$config_dir/ahab.toml.tmp" && mv "$config_dir/ahab.toml.tmp" "$config_dir/ahab.toml"
+        # Installed configuration must not depend on the invoking user's HOME.
+        sed -e 's|^state_dir = .*|state_dir = "/var/lib/ahab/state"|' \
+            -e 's|^oci_config = .*|oci_config = "/var/lib/ahab/.oci/config"|' \
+            -e 's|^ssh_key_file = .*|ssh_key_file = "/var/lib/ahab/.ssh/id_ed25519.pub"|' \
+            "$config_dir/ahab.toml" > "$config_dir/ahab.toml.tmp"
+        mv "$config_dir/ahab.toml.tmp" "$config_dir/ahab.toml"
     fi
 
     # --- notifications template ---
