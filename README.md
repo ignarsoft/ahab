@@ -14,8 +14,6 @@
 <sub><em>Ahab in his final chase with Moby Dick</em> — I. W. Taber, 1902.<br>
 <a href="https://commons.wikimedia.org/wiki/File:Moby_Dick_final_chase.jpg">Wikimedia Commons</a> · Public domain in the United States.</sub>
 
-<br><br>
-
 **Linux · macOS · WSL**
 
 [Setup](#setup) · [Capacity checks](#capacity-checks) · [Recovery](#recovery) · [Notifications](#notifications) · [Systemd](#systemd-service-linux) · [Development](#development)
