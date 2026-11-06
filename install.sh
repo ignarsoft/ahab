@@ -3,16 +3,19 @@
 # Keep piped downloads from executing until the full installer is parsed.
 ahab_install() (
     set -euo pipefail
-    umask 077
+    umask 022
 
     # --- defaults ---
-    local root="/opt/ahab"
-    local config_dir="/etc/ahab"
-    local state_dir="/var/lib/ahab"
-    local skip_root=0
-    if [[ -n "${AHAB_SKIP_ROOT:-}" ]]; then
-        skip_root=1
+    # DESTDIR stages every write without modifying the host system.
+    local dest="${DESTDIR:-}"
+    if [[ -n "$dest" && ( "$dest" != /* || "$dest" == / ) ]]; then
+        echo 'DESTDIR must be an absolute staging directory other than /.' >&2
+        exit 1
     fi
+    local root="$dest/opt/ahab"
+    local config_dir="$dest/etc/ahab"
+    local state_dir="$dest/var/lib/ahab"
+    local bin_dir="$dest/usr/local/bin"
     local repo="${AHAB_REPOSITORY:-ignarsoft/ahab}"
     local ref="${AHAB_REF:-main}"
     local python="${AHAB_PYTHON:-}"
@@ -44,6 +47,7 @@ Environment overrides:
   AHAB_REPOSITORY     GitHub repo (default: ignarsoft/ahab)
   AHAB_REF            Git ref (default: main)
   AHAB_PYTHON         Python executable path
+  DESTDIR            Stage all files under this absolute path; no root required
 
 Run without --dev to download from GitHub. Requires root for /opt, /etc, /var.
 EOF
@@ -53,21 +57,11 @@ EOF
         esac
     done
 
-    # --- require root ---
-    # --- check for skip-root ---
-    if [[ -n "${AHAB_SKIP_ROOT:-}" ]]; then
-        skip_root=1
+    if [[ -n "$dest" && "$with_systemd" -eq 1 ]]; then
+        echo 'Systemd setup is unavailable with DESTDIR.' >&2
+        exit 1
     fi
-    # --- check for skip-root ---
-    if [[ -n "${AHAB_SKIP_ROOT:-}" ]]; then
-        skip_root=1
-    fi
-    # --- check for skip-root first ---
-    if [[ -n "${AHAB_SKIP_ROOT:-}" ]]; then
-        skip_root=1
-    fi
-    # --- require root (only if not skipping) ---
-    if [[ "$skip_root" -ne 1 && -z "${AHAB_ALLOW_NONROOT:-}" && $EUID -ne 0 ]]; then
+    if [[ -z "$dest" && $EUID -ne 0 ]]; then
         echo "This installer must run as root. Use: sudo bash install.sh" >&2
         exit 1
     fi
@@ -87,7 +81,7 @@ EOF
     # --- check platform ---
     local platform
     platform="$(uname -s)"
-    if [[ -z "${AHAB_ALLOW_NONROOT:-}" && "$platform" != "Linux" && "$platform" != "Darwin" ]]; then
+    if [[ "$platform" != "Linux" && "$platform" != "Darwin" ]]; then
         echo "Supported platforms: Linux, macOS (and WSL on Windows)." >&2
         exit 1
     fi
@@ -126,20 +120,11 @@ EOF
 
     # --- install application files ---
     echo "Installing application to $root..."
-    mkdir -p "$root"
-    if [[ "$remote" -eq 1 ]]; then
-        mkdir -p "$root/ahab"
-        cp -R "$source_dir/ahab/." "$root/ahab/"
-        cp -R "$source_dir/deploy" "$root/deploy"
-        cp "$source_dir/pyproject.toml" "$source_dir/ahab.example.toml" \
-           "$source_dir/README.md" "$source_dir/LICENSE" "$root/"
-    else
-        # local dev: copy from checkout
-        cp -R "$source_dir/ahab/." "$root/ahab/"
-        cp -R "$source_dir/deploy" "$root/deploy"
-        cp "$source_dir/pyproject.toml" "$source_dir/ahab.example.toml" \
-           "$source_dir/README.md" "$source_dir/LICENSE" "$root/"
-    fi
+    mkdir -p "$root/ahab" "$root/deploy"
+    cp -R "$source_dir/ahab/." "$root/ahab/"
+    cp -R "$source_dir/deploy/." "$root/deploy/"
+    cp "$source_dir/pyproject.toml" "$source_dir/ahab.example.toml" \
+       "$source_dir/README.md" "$source_dir/LICENSE" "$root/"
 
     # --- private Python if needed ---
     if [[ -z "$python" ]] || ! "$python" -c 'import venv, ensurepip' >/dev/null 2>&1; then
@@ -167,6 +152,10 @@ EOF
     [[ "$dev" -eq 0 ]] || package="$root[dev]"
     echo "Installing Ahab package..."
     "$root/.venv/bin/python" -m pip install --no-input --disable-pip-version-check --editable "$package"
+
+    # Application code and native libraries must be readable by runtime users.
+    chmod -R a+rX "$root"
+    umask 077
 
     # --- configuration directory ---
     echo "Setting up configuration in $config_dir..."
@@ -196,12 +185,13 @@ EOF
     fi
 
     # --- wrapper script in /usr/local/bin ---
-    cat > /usr/local/bin/ahab <<EOF
+    mkdir -p "$bin_dir"
+    cat > "$bin_dir/ahab" <<EOF
 #!/usr/bin/env bash
 cd -- "$root" || exit 1
-exec "$root/.venv/bin/ahab" "\$@"
+exec "$root/.venv/bin/ahab" --config "$config_dir/ahab.toml" "\$@"
 EOF
-    chmod 755 /usr/local/bin/ahab
+    chmod 755 "$bin_dir/ahab"
 
     # --- systemd service (Linux only) ---
     if [[ "$platform" == "Linux" && "$with_systemd" -eq 1 ]]; then
@@ -215,6 +205,10 @@ EOF
         # ensure state dir ownership
         chown -R ahab:ahab "$state_dir"
         chmod 700 "$state_dir"
+
+        chown root:ahab "$config_dir" "$config_dir/ahab.toml"
+        chmod 750 "$config_dir"
+        chmod 640 "$config_dir/ahab.toml"
 
         # install unit file from deploy/
         cp "$root/deploy/ahab.service" /etc/systemd/system/ahab.service

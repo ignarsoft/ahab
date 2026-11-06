@@ -17,7 +17,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install without system Python
         run: |
-          bash install.sh --dev
+          bash install.sh --dev --no-systemd
+          /opt/ahab/.venv/bin/python -c 'import sys; assert sys.version_info[:2] == (3, 13)'
           /opt/ahab/.venv/bin/python -m pytest -q
           /opt/ahab/.venv/bin/ahab --help
 
@@ -34,13 +35,13 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - name: Install
-        run: sudo bash install.sh --dev
-      - name: Fix permissions
-        run: sudo chmod -R a+rX /opt/ahab/.venv
+        shell: bash
+        run: sudo bash install.sh --dev --no-systemd --python "$(command -v python)"
       - name: Test and lint
         shell: bash
         run: |
           PYTHON=/opt/ahab/.venv/bin/python
+          "$PYTHON" -c 'import sys; assert sys.version_info[:2] == (3, 13)'
           "$PYTHON" -m pytest -q
           "$PYTHON" -m ruff check ahab tests
           "$PYTHON" -m ruff format --check ahab tests
