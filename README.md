@@ -125,6 +125,19 @@ Run **one hunter per target**, using the same state directory after restarts. Th
 lock does not coordinate separate hosts. Matching names or `ahab-hunter-id` tags
 prevent another launch, including for stopped instances.
 
+Inspect the local journal without contacting OCI:
+
+```bash
+sudo ahab status
+```
+
+This prints a read-only JSON snapshot: recorded attempts, wait time, accepted instance
+ID, notification delivery, and uncertain-request age. It does not need OCI credentials
+or notification settings, create state files, or expose retry tokens, launch payloads,
+or SSH keys. `phase` describes the journal, not whether a hunter process is running;
+use `systemctl status ahab` to check the service. Search limits still apply to `run`.
+An uncertain request at least 23 hours old is flagged for manual reconciliation.
+
 Do not delete the journal or change instance settings during an uncertain launch.
 Requests older than 23 hours require manual reconciliation rather than a new token.
 Once a launch is accepted, polling or notification failures never trigger another

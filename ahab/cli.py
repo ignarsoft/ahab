@@ -18,7 +18,7 @@ LOG = logging.getLogger(__name__)
 
 def main():
     parser = argparse.ArgumentParser(description="Ahab - OCI A1 hunter")
-    parser.add_argument("command", choices=("discover", "doctor", "run"))
+    parser.add_argument("command", choices=("discover", "doctor", "status", "run"))
     parser.add_argument("--config", default="ahab.toml", help="TOML file (default: ahab.toml)")
     parser.add_argument("--env-file", help="Literal notification KEY=value file")
     parser.add_argument(
@@ -31,6 +31,9 @@ def main():
     signal.signal(signal.SIGTERM, lambda *_: (_ for _ in ()).throw(KeyboardInterrupt()))
     try:
         config = Config.load(args.config)
+        if args.command == "status":
+            print(json.dumps(Store(config.state_dir, create=False).status(), indent=2))
+            return 0
         if args.env_file:
             load_environment(args.env_file)
         validate_environment()
