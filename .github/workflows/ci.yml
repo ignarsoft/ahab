@@ -22,6 +22,21 @@ jobs:
           /opt/ahab/.venv/bin/python -m pytest -q
           /opt/ahab/.venv/bin/ahab --help
 
+  systemd:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Test real systemd installation and sandbox
+        shell: bash
+        run: sudo bash tests/integration/systemd.sh "$(command -v python)"
+      - name: Service diagnostics
+        if: failure()
+        run: sudo journalctl -u ahab --no-pager -n 100
+
   test:
     strategy:
       fail-fast: false
