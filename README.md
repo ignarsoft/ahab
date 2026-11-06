@@ -21,14 +21,15 @@ and never creates networks or deletes instances.
 curl -fsSL https://raw.githubusercontent.com/ignarsoft/ahab/main/install.sh | sudo bash
 ```
 
-For WSL, run the command inside your Linux distribution with systemd enabled.
+For WSL, run this inside your Linux distribution. Enable systemd only if you want
+the optional background service; manual operation does not require it.
 
 The installer runs as root and sets up:
 - Application in `/opt/ahab` (owned by root)
 - Configuration in `/etc/ahab/ahab.toml` and `/etc/ahab/notifications.env`
-- State and credentials in `/var/lib/ahab` (owned by the `ahab` user)
+- Private state and credentials in `/var/lib/ahab` (root-owned until service setup)
 - A system-wide `ahab` command in `/usr/local/bin`
-- Optional systemd service (enabled with `--systemd`)
+- Optional systemd service, running as the dedicated `ahab` user
 
 No manual PATH changes are needed. The installer uses Python 3.11+ if available,
 or installs a private Python 3.13 runtime via uv.
@@ -36,11 +37,22 @@ or installs a private Python 3.13 runtime via uv.
 These commands execute downloaded code. Review the installer first if needed.
 Downloads use GitHub, PyPI, and, when Python is missing, Astral's uv sources.
 
-Installation does not start the hunter or provision cloud resources. After installing,
-supply:
+Installation alone does not start hunting. On interactive Linux terminals with
+systemd, the installer asks whether to install the service, then separately whether
+to validate and start it. **Confirming startup can create a VM.** For unattended
+installation without prompts or startup, append `-s -- --no-systemd` to `sudo bash`.
+
+After installing, supply:
 - OCI API profile at `/var/lib/ahab/.oci/config`
-- SSH public key at `/var/lib/ahab/.ssh/id_ed25519.pub`
-- Subnet ID and SSH key path in `/etc/ahab/ahab.toml`
+- OCI private API key at `/var/lib/ahab/.oci/key.pem`; set the profile's `key_file`
+  to that absolute path
+- SSH **public** key at `/var/lib/ahab/.ssh/id_ed25519.pub` (not your SSH private key)
+- Subnet ID in `/etc/ahab/ahab.toml`
+
+Use `sudo` to create/edit these protected files. Set credential files to mode `600`.
+When the Linux service account exists, make files under `/var/lib/ahab` accessible
+to it with `sudo chown -R ahab:ahab /var/lib/ahab`. Without the service account,
+keep them root-owned. Do not make credentials world-readable.
 
 Then run `sudo ahab doctor` (read-only checks) and `sudo ahab run` (starts hunting).
 The launcher uses the `ahab` service account when present on Linux; otherwise it
@@ -53,7 +65,11 @@ at `/opt/ahab`. Rerun the command to update. Stop any running hunter before upda
 
 Set `subnet_id` and `ssh_key_file` in `/etc/ahab/ahab.toml`. Optionally choose an `image_id`;
 otherwise Ahab selects a compatible Ubuntu image and keeps it across restarts.
-All paths in the configuration are absolute. OCI API keys and SSH keys are separate.
+New system installs generate absolute credential and state paths. Updates preserve
+existing configuration: for older installs, change `oci_config`, `ssh_key_file`, and
+`state_dir` to the `/var/lib/ahab` paths above if they still use `~` or relative paths.
+The repository example retains portable development defaults.
+OCI API keys and SSH keys are separate.
 
 ```bash
 sudo ahab doctor        # Read-only checks
@@ -91,11 +107,12 @@ Once a launch is accepted, polling or notification failures never trigger anothe
 creation. Results may still show `PROVISIONING` when the wait timeout expires.
 
 Attempt limits and deadlines persist across restarts. Failed notifications can be
-retried with `ahab run`; delivery may repeat after an interruption.
+retried with `sudo ahab run`; delivery may repeat after an interruption.
 
 ## Notifications
 
-Set these environment variables as needed:
+Edit `/etc/ahab/notifications.env` with `sudo`. The installed launcher and systemd
+service both load this file. Supported keys:
 
 ```text
 TELEGRAM_BOT_TOKEN
@@ -103,21 +120,42 @@ TELEGRAM_CHAT_ID
 AHAB_WEBHOOK_URL
 ```
 
+Use one `KEY=value` per line. Blank lines and lines beginning with `#` are ignored;
+matching outer single or double quotes are optional. Values are literal: no shell
+commands, substitutions, `export`, escapes, or inline comments. Unknown and duplicate
+keys are rejected. Existing process environment variables take precedence; `sudo`
+may discard caller environment variables, so prefer the shared file.
+
 Webhooks require HTTPS and receive `text` and `content` fields. Tokens are not stored
-in TOML. Manual runs do not load `.env` files.
+in TOML. The file is root-owned and private (service setup grants read access only
+to the `ahab` group). Direct development CLI runs load it only with `--env-file PATH`.
 
 ## systemd service (Linux)
 
-The installer can enable the service automatically:
+Install the service without unattended startup:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/ignarsoft/ahab/main/install.sh | sudo bash -s -- --systemd
 ```
 
-Or run `sudo bash install.sh --systemd` after installation.
+This creates the `ahab` system user, transfers state ownership to it, and installs
+`deploy/ahab.service`. It does not enable or start the service unless you confirm the
+separate interactive startup question or explicitly pass `--systemd --start`.
+A running systemd instance is required; unsupported hosts fail clearly.
 
-This creates the `ahab` system user, installs the unit file, enables and starts the service.
-Logs: `journalctl -u ahab -f`
+After configuring credentials and subnet, start explicitly:
+
+```bash
+sudo ahab doctor && sudo systemctl enable --now ahab
+sudo journalctl -u ahab -f
+```
+
+Alternatively, rerun the installer with `--systemd --start`. It runs the same
+read-only `doctor` check as the service user before enabling/starting. A failed
+check aborts startup. A successful check does not guarantee capacity or free pricing.
+Stop the service before updating: `sudo systemctl stop ahab`. Updates preserve
+configuration and state. The installer refuses to update an active service.
+Do not run a manual hunter and the service concurrently.
 
 The service runs as the `ahab` user with `/var/lib/ahab` as its home directory.
 Exit codes: `0` result, `1` error, `2` search limit, `75` transient failure, `130` interruption.
@@ -131,8 +169,12 @@ From a local checkout:
 sudo bash install.sh --dev
 ```
 
-This installs from the current directory (no download) and skips systemd setup.
-Local installs do not create the systemd service.
+This installs from the checkout beside `install.sh` (no download), with development
+dependencies in the same system-wide layout. It skips service prompts unless you
+explicitly add `--systemd`. It is not an unprivileged local installation.
+
+Installer tests use `DESTDIR` to stage all filesystem writes in temporary directories
+without root. Staging refuses systemd setup and is not a relocatable deployment.
 
 ```bash
 /opt/ahab/.venv/bin/python -m pytest -q
@@ -141,8 +183,12 @@ Local installs do not create the systemd service.
 ```
 
 Tests use mocks without Oracle credentials, including remote-installer download mocks.
-CI tests installation on Linux and macOS. WSL uses the Linux installer; dedicated WSL,
-live cloud provisioning, and systemd tests are not included.
+CI covers Python 3.13 on Linux/macOS and bootstrap without preinstalled Python.
+A separate Ubuntu job installs the actual systemd unit and checks startup rejection,
+service identity, secret access, notification loading, state ownership, and sandboxed
+execution. Its workload is a local probe with networking denied, not an OCI hunter.
+WSL uses the Linux installer; dedicated WSL and live cloud provisioning tests are not
+included.
 
 ## License
 

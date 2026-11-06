@@ -40,7 +40,7 @@ Installs Ahab to /opt/ahab with configuration in /etc/ahab and state in /var/lib
 
 Options:
   --python PATH       Use this Python interpreter (must be 3.11+ on Linux/macOS)
-  --dev               Install from current directory (no download), skip systemd setup
+  --dev               Install from checkout (no download), skip service prompts
   --systemd           Install systemd service without starting it (Linux only)
   --start             With --systemd, validate, enable and start the hunter
   --no-systemd        Do not configure systemd or prompt
@@ -285,12 +285,13 @@ EOF
     echo
     echo "Next steps:"
     echo "  1. Edit $config_dir/ahab.toml — set subnet_id and ssh_key_file"
-    echo "  2. Place OCI API config at /var/lib/ahab/.oci/config (key_file must point to a local key)"
+    echo "  2. Place OCI API config at /var/lib/ahab/.oci/config (key_file: /var/lib/ahab/.oci/key.pem)"
     echo "  3. Copy SSH public key to /var/lib/ahab/.ssh/id_ed25519.pub"
     echo "  4. Run: sudo ahab doctor (read-only checks)"
     echo "  5. Run: sudo ahab run    (starts hunting; can create a VM)"
     if [[ "$platform" == "Linux" && "$with_systemd" -eq 0 ]]; then
-        echo "  To run as a service: sudo bash install.sh --systemd"
+        echo "  To install the service: sudo bash install.sh --systemd"
+        echo "  After configuring credentials: sudo ahab doctor && sudo systemctl enable --now ahab"
     fi
 )
 ahab_install "$@"
