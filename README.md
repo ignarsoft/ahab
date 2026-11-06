@@ -1,17 +1,43 @@
+<div align="center">
+
 # Ahab
 
-A restart-safe Oracle Cloud capacity hunter for `VM.Standard.A1.Flex`.
-Defaults: **2 OCPU, 12 GB RAM, 50 GB boot volume**.
+**A patient hunter for elusive Oracle Cloud A1 capacity.**
 
-- Rotates through compatible Availability Domains.
-- Checks capacity before launching, with optional fallback.
-- Uses exponential backoff, jitter, and `Retry-After`.
-- Preserves launch requests and retry tokens across restarts.
-- Saves results and supports Telegram and HTTPS webhooks.
+[![CI](https://github.com/ignarsoft/ahab/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/ignarsoft/ahab/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/ignarsoft/ahab?style=flat&color=1f6f8b)](https://github.com/ignarsoft/ahab/releases/latest)
+[![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](pyproject.toml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-1f6f8b)](LICENSE)
 
-Capacity and free-tier eligibility are **not guaranteed**. Check your account limits,
-existing resources, and pricing before running. Ahab requires the tenancy home region
-and never creates networks or deletes instances.
+<img src="docs/assets/ahab-final-chase.jpg" alt="Ahab raising his harpoon during the final chase of Moby-Dick, illustrated by I. W. Taber" width="250">
+
+<sub><em>Ahab in his final chase with Moby Dick</em> — I. W. Taber, 1902.<br>
+<a href="https://commons.wikimedia.org/wiki/File:Moby_Dick_final_chase.jpg">Wikimedia Commons</a> · Public domain in the United States.</sub>
+
+<br><br>
+
+**Linux · macOS · WSL**
+
+[Setup](#setup) · [Capacity checks](#capacity-checks) · [Recovery](#recovery) · [Notifications](#notifications) · [Systemd](#systemd-service-linux) · [Development](#development)
+
+</div>
+
+---
+
+A restart-safe capacity hunter for Oracle Cloud's `VM.Standard.A1.Flex`.
+Defaults: **2 OCPU · 12 GB RAM · 50 GB boot volume**.
+
+| Built for the long chase | What it does |
+| --- | --- |
+| **Keep searching** | Rotates through compatible Availability Domains and checks capacity before launching. |
+| **Back off gracefully** | Uses exponential backoff, jitter, and `Retry-After`. |
+| **Resume safely** | Preserves launch requests and retry tokens across restarts. |
+| **Know when it lands** | Saves results and sends Telegram or HTTPS webhook notifications. |
+
+> [!IMPORTANT]
+> Capacity and free-tier eligibility are **not guaranteed**. Check your account limits,
+> existing resources, and pricing before running. Ahab requires the tenancy home region
+> and never creates networks or deletes instances.
 
 ## Setup
 
@@ -190,6 +216,14 @@ execution. Its workload is a local probe with networking denied, not an OCI hunt
 WSL uses the Linux installer; dedicated WSL and live cloud provisioning tests are not
 included.
 
+## Credits
+
+The illustration above is **I. W. Taber's** depiction of Ahab's final chase of
+Moby-Dick, from the **1902 edition of *Moby Dick*, Charles Scribner's Sons, New York**.
+Image source and rights information: [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Moby_Dick_final_chase.jpg).
+The illustration is public domain in the United States; its rights status is separate
+from the project's software license.
+
 ## License
 
-MIT. See [LICENSE](LICENSE).
+Code: **MIT**. See [LICENSE](LICENSE).
