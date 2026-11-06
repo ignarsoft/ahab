@@ -42,7 +42,10 @@ supply:
 - SSH public key at `/var/lib/ahab/.ssh/id_ed25519.pub`
 - Subnet ID and SSH key path in `/etc/ahab/ahab.toml`
 
-Then run `ahab doctor` (read-only checks) and `ahab run` (starts hunting).
+Then run `sudo ahab doctor` (read-only checks) and `sudo ahab run` (starts hunting).
+The launcher uses the `ahab` service account when present on Linux; otherwise it
+runs as root. Configuration stays private, and manual and service runs share the
+same state owner. Do not bypass the launcher for operational commands.
 
 Set `AHAB_PYTHON`, `AHAB_REPOSITORY`, or `AHAB_REF` before installing to override
 the Python executable, GitHub repository, or revision. The install location is fixed
@@ -53,9 +56,9 @@ otherwise Ahab selects a compatible Ubuntu image and keeps it across restarts.
 All paths in the configuration are absolute. OCI API keys and SSH keys are separate.
 
 ```bash
-ahab doctor          # Read-only checks
-ahab run --dry-run   # Read-only checks
-ahab run             # Can create a VM
+sudo ahab doctor        # Read-only checks
+sudo ahab run --dry-run # Read-only checks
+sudo ahab run           # Can create a VM
 ```
 
 Use `--config PATH` to select another configuration file. Public SSH access also

@@ -188,6 +188,20 @@ EOF
     mkdir -p "$bin_dir"
     cat > "$bin_dir/ahab" <<EOF
 #!/usr/bin/env bash
+set -euo pipefail
+# Use the service identity when installed, so manual runs share its state safely.
+if [[ "\$(uname -s)" == Linux ]] && id -u ahab >/dev/null 2>&1; then
+    if [[ \$EUID -eq 0 ]]; then
+        exec runuser -u ahab -- env HOME="$state_dir" "\$0" "\$@"
+    elif [[ \$EUID -ne \$(id -u ahab) ]]; then
+        echo 'Run this command with sudo: sudo ahab <command>' >&2
+        exit 1
+    fi
+elif [[ \$EUID -ne 0 ]]; then
+    echo 'Run this command with sudo: sudo ahab <command>' >&2
+    exit 1
+fi
+export HOME="$state_dir"
 cd -- "$root" || exit 1
 exec "$root/.venv/bin/ahab" --config "$config_dir/ahab.toml" "\$@"
 EOF
@@ -231,8 +245,8 @@ EOF
     echo "  1. Edit $config_dir/ahab.toml — set subnet_id and ssh_key_file"
     echo "  2. Place OCI API config at /var/lib/ahab/.oci/config (key_file must point to a local key)"
     echo "  3. Copy SSH public key to /var/lib/ahab/.ssh/id_ed25519.pub"
-    echo "  4. Run: ahab doctor    (read-only checks)"
-    echo "  5. Run: ahab run       (starts hunting; can create a VM)"
+    echo "  4. Run: sudo ahab doctor (read-only checks)"
+    echo "  5. Run: sudo ahab run    (starts hunting; can create a VM)"
     if [[ "$platform" == "Linux" && "$with_systemd" -eq 0 ]]; then
         echo "  To run as a service: sudo bash install.sh --systemd"
     fi
