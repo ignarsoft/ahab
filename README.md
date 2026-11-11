@@ -5,7 +5,7 @@
 **A patient hunter for elusive Oracle Cloud A1 capacity.**
 
 [![CI](https://github.com/ignarsoft/ahab/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/ignarsoft/ahab/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/ignarsoft/ahab?style=flat&color=1f6f8b)](https://github.com/ignarsoft/ahab/releases/latest)
+[![Release](https://img.shields.io/github/v/release/ignarsoft/ahab?display_name=tag&sort=date&style=flat&color=1f6f8b&cacheSeconds=300)](https://github.com/ignarsoft/ahab/releases/latest)
 [![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](pyproject.toml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-1f6f8b)](LICENSE)
 
