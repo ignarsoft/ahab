@@ -15,6 +15,7 @@ memory_gb = 12
 boot_volume_gb = 50
 assign_public_ip = true
 availability_domains = [] # Empty uses all compatible ADs.
+nsg_ids = [] # Up to five existing network security groups in the subnet VCN.
 
 capacity_mode = "auto" # auto, required, or off
 interval_seconds = 120

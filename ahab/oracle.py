@@ -87,6 +87,12 @@ class Oracle:
             raise FatalError("The subnet is not AVAILABLE")
         if self.c.assign_public_ip and subnet.prohibit_public_ip_on_vnic:
             raise FatalError("The subnet does not allow public IPs")
+        for nsg_id in self.c.nsg_ids:
+            nsg = self.network.get_network_security_group(nsg_id).data
+            if nsg.lifecycle_state != "AVAILABLE":
+                raise FatalError("A selected network security group is not AVAILABLE")
+            if not nsg.vcn_id or nsg.vcn_id != subnet.vcn_id:
+                raise FatalError("All network security groups must belong to the subnet VCN")
         key = Path(self.c.ssh_key_file).expanduser().read_text(encoding="utf-8").strip()
         parts = key.split()
         if (
@@ -148,6 +154,9 @@ class Oracle:
             "display_name": self.c.display_name,
             "ssh_public_key": key,
         }
+        # Omit empty optional settings to preserve journals from earlier versions.
+        if self.c.nsg_ids:
+            self.plan["nsg_ids"] = list(self.c.nsg_ids)
         return self.plan
 
     def check_limits(self, ads):
@@ -273,6 +282,9 @@ class Oracle:
         return "unknown"
 
     def payload(self, ad):
+        vnic = {"subnet_id": self.c.subnet_id, "assign_public_ip": self.c.assign_public_ip}
+        if self.c.nsg_ids:
+            vnic["nsg_ids"] = list(self.c.nsg_ids)
         return {
             "availability_domain": ad,
             "compartment_id": self.compartment,
@@ -284,10 +296,7 @@ class Oracle:
                 "image_id": self.plan["image_id"],
                 "boot_volume_size_in_gbs": self.c.boot_volume_gb,
             },
-            "create_vnic_details": {
-                "subnet_id": self.c.subnet_id,
-                "assign_public_ip": self.c.assign_public_ip,
-            },
+            "create_vnic_details": vnic,
             "metadata": {"ssh_authorized_keys": self.ssh_key},
             "freeform_tags": {TAG: self.c.hunter_id},
             "instance_options": {"are_legacy_imds_endpoints_disabled": True},

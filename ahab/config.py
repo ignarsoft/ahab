@@ -21,6 +21,7 @@ class Config:
     boot_volume_gb: int = 50
     assign_public_ip: bool = True
     availability_domains: tuple[str, ...] = ()
+    nsg_ids: tuple[str, ...] = ()
     capacity_mode: str = "auto"
     interval_seconds: float = 120.0
     jitter_seconds: float = 30.0
@@ -57,13 +58,21 @@ class Config:
                 valid = isinstance(value, str)
             if not valid:
                 raise ValueError(f"Invalid type for {f.name}")
-        if "availability_domains" in values:
-            values["availability_domains"] = tuple(values["availability_domains"])
+        for name in ("availability_domains", "nsg_ids"):
+            if name in values:
+                values[name] = tuple(values[name])
         result = cls(**values)
         result.validate()
         return result
 
     def validate(self):
+        if len(self.nsg_ids) > 5 or len(set(self.nsg_ids)) != len(self.nsg_ids):
+            raise ValueError("nsg_ids must contain at most five unique NSG OCIDs")
+        if any(
+            not value.startswith("ocid1.networksecuritygroup.") or value.strip() != value
+            for value in self.nsg_ids
+        ):
+            raise ValueError("nsg_ids must contain network security group OCIDs")
         if self.capacity_mode not in ("auto", "required", "off"):
             raise ValueError("capacity_mode must be auto, required, or off")
         if not self.hunter_id.strip() or not self.display_name.strip():

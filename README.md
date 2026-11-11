@@ -104,6 +104,19 @@ sudo ahab run           # Can create a VM
 Use `--config PATH` to select another configuration file. Public SSH access also
 requires suitable routes, security rules, and guest firewall settings.
 
+Optionally attach the primary VNIC to existing network security groups:
+
+```toml
+nsg_ids = ["ocid1.networksecuritygroup.oc1.your-region.your-id"]
+```
+
+Select at most five distinct NSG OCIDs, all in the subnet's VCN. `doctor` and `run`
+validate that each group is available before launching. Ahab does not create groups
+or modify rules; permissions to inspect and attach the selected groups are required.
+The default empty list preserves subnet security-list behavior. Changing this setting
+after hunting begins changes the launch plan and requires manual journal review;
+never delete an uncertain request to apply a networking change.
+
 ## Capacity checks
 
 Check A1 compute quota headroom separately from physical host capacity:

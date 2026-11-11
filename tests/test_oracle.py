@@ -113,6 +113,43 @@ def test_sdk_launch_models_and_token():
     assert "fault_domain" not in payload
 
 
+def test_nsgs_reach_sdk_and_saved_payload_is_independent_of_config():
+    api = adapter()
+    nsg = "ocid1.networksecuritygroup.oc1.test"
+    api.c = replace(api.c, nsg_ids=(nsg,))
+    payload = api.payload("AD1")
+    assert payload["create_vnic_details"]["nsg_ids"] == [nsg]
+    api.c = replace(api.c, nsg_ids=())
+    api.launch(payload, "same-token")
+    details = api.compute.launch_instance.call_args.args[0]
+    assert details.create_vnic_details.nsg_ids == [nsg]
+    assert "nsg_ids" not in api.payload("AD1")["create_vnic_details"]
+
+
+@pytest.mark.parametrize(
+    "state,vcn,message",
+    [("TERMINATING", "vcn1", "not AVAILABLE"), ("AVAILABLE", "vcn2", "subnet VCN")],
+)
+def test_prepare_rejects_unusable_nsg_before_launch(state, vcn, message):
+    api = adapter()
+    api.c = replace(api.c, nsg_ids=("ocid1.networksecuritygroup.oc1.test",))
+    api.config = {"tenancy": "tenancy", "region": "home"}
+    api.identity = Mock()
+    api.identity.list_region_subscriptions.return_value.data = [
+        Obj(is_home_region=True, region_name="home")
+    ]
+    api.network.get_subnet.return_value.data = Obj(
+        lifecycle_state="AVAILABLE", prohibit_public_ip_on_vnic=False, vcn_id="vcn1"
+    )
+    api.network.get_network_security_group.return_value.data = Obj(
+        lifecycle_state=state, vcn_id=vcn
+    )
+    with pytest.raises(FatalError, match=message):
+        api.prepare()
+    api.compute.launch_instance.assert_not_called()
+    api.compute.create_compute_capacity_report.assert_not_called()
+
+
 def test_existing_instance_other_shape_does_not_stop_hunt():
     api = adapter()
     api.all = Mock(
@@ -144,8 +181,9 @@ def test_prepare_home_region_guard():
     api.compute.launch_instance.assert_not_called()
 
 
+@pytest.mark.parametrize("nsg_ids", [(), ("ocid1.networksecuritygroup.oc1.test",)])
 @pytest.mark.parametrize("valid_key", [True, False])
-def test_prepare_pins_image_and_ad_specific_subnet(tmp_path, valid_key):
+def test_prepare_pins_image_and_ad_specific_subnet(tmp_path, valid_key, nsg_ids):
     api = adapter()
     key = tmp_path / "ssh.pub"
     public = (
@@ -155,7 +193,7 @@ def test_prepare_pins_image_and_ad_specific_subnet(tmp_path, valid_key):
         .decode()
     )
     key.write_text(public if valid_key else "ssh-ed25519 AAAA comment", encoding="utf-8")
-    api.c = replace(api.c, ssh_key_file=str(key))
+    api.c = replace(api.c, ssh_key_file=str(key), nsg_ids=nsg_ids)
     api.config = {"tenancy": "tenancy1", "region": "home-region"}
     api.identity = Mock()
     api.identity.list_region_subscriptions.return_value.data = [
@@ -163,7 +201,13 @@ def test_prepare_pins_image_and_ad_specific_subnet(tmp_path, valid_key):
     ]
     api.identity.list_availability_domains.return_value.data = [Obj(name="AD1"), Obj(name="AD2")]
     api.network.get_subnet.return_value.data = Obj(
-        lifecycle_state="AVAILABLE", prohibit_public_ip_on_vnic=False, availability_domain="AD2"
+        lifecycle_state="AVAILABLE",
+        prohibit_public_ip_on_vnic=False,
+        availability_domain="AD2",
+        vcn_id="vcn1",
+    )
+    api.network.get_network_security_group.return_value.data = Obj(
+        lifecycle_state="AVAILABLE", vcn_id="vcn1"
     )
     api.compute.get_image.return_value.data = Obj(lifecycle_state="AVAILABLE", size_in_mbs=1024)
     api.all = Mock(return_value=[Obj(shape=SHAPE)])
@@ -175,6 +219,12 @@ def test_prepare_pins_image_and_ad_specific_subnet(tmp_path, valid_key):
     plan = api.prepare({"image_id": "pinned-image"})
     assert plan["ads"] == ["AD2"]
     assert plan["image_id"] == "pinned-image"
+    if nsg_ids:
+        assert plan["nsg_ids"] == list(nsg_ids)
+        api.network.get_network_security_group.assert_called_once_with(nsg_ids[0])
+    else:
+        assert "nsg_ids" not in plan
+        api.network.get_network_security_group.assert_not_called()
     api.compute.list_images.assert_not_called()
     api.compute.create_compute_capacity_report.assert_not_called()
     api.compute.launch_instance.assert_not_called()
