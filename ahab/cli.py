@@ -24,7 +24,14 @@ def main():
     parser.add_argument(
         "--dry-run", action="store_true", help="Read-only checks; no resources created"
     )
+    parser.add_argument(
+        "--check-limits",
+        action="store_true",
+        help="Also verify compute quota headroom (doctor only)",
+    )
     args = parser.parse_args()
+    if args.check_limits and args.command != "doctor":
+        parser.error("--check-limits requires doctor")
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     if os.name == "posix":
         os.umask(0o077)
@@ -44,8 +51,17 @@ def main():
         if args.command == "doctor" or args.dry_run:
             plan = api.prepare()
             # Omit the public key from output.
-            print(json.dumps({k: v for k, v in plan.items() if k != "ssh_public_key"}, indent=2))
+            output = {k: v for k, v in plan.items() if k != "ssh_public_key"}
             existing = api.find_existing()
+            if args.check_limits:
+                output["new_instance_quota"] = api.check_limits(plan["ads"])
+            print(json.dumps(output, indent=2))
+            if (
+                args.check_limits
+                and not existing
+                and not output["new_instance_quota"]["sufficient"]
+            ):
+                raise FatalError("Insufficient A1 quota in every selected AD; no launch attempted")
             LOG.info("Checks passed. Existing match: %s", existing.id if existing else "none")
             LOG.info("Read-only: no capacity report requested or resources created")
             return 0

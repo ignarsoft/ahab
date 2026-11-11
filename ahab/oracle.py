@@ -1,6 +1,7 @@
 """OCI SDK adapter with read-only discovery."""
 
 import logging
+import math
 import time
 from pathlib import Path
 
@@ -31,6 +32,7 @@ class Oracle:
         self.compute = oci.core.ComputeClient(self.config, **options)
         self.network = oci.core.VirtualNetworkClient(self.config, **options)
         self.identity = oci.identity.IdentityClient(self.config, **options)
+        self.limits = oci.limits.LimitsClient(self.config, **options)
         self.compartment = settings.compartment_id or self.config["tenancy"]
         self.report_disabled = False
 
@@ -147,6 +149,59 @@ class Oracle:
             "ssh_public_key": key,
         }
         return self.plan
+
+    def check_limits(self, ads):
+        """Read compute quota headroom; this does not measure host capacity or cost."""
+        if not ads:
+            raise FatalError("No ADs to check for quota availability")
+        resources = {}
+        for field, name in (
+            ("ocpus", "standard-a1-core-count"),
+            ("memory_gb", "standard-a1-memory-count"),
+        ):
+            definitions = self.all(
+                self.limits.list_limit_definitions,
+                self.config["tenancy"],
+                service_name="compute",
+                name=name,
+            )
+            definitions = [d for d in definitions if d.name == name]
+            if len(definitions) != 1:
+                raise FatalError(f"Cannot verify quota: missing or ambiguous limit {name}")
+            definition = definitions[0]
+            scope = definition.scope_type
+            if not definition.is_resource_availability_supported or scope not in (
+                "AD",
+                "REGION",
+                "GLOBAL",
+            ):
+                raise FatalError(f"Cannot verify quota availability for {name}")
+            values = {}
+            for ad in ads if scope == "AD" else [None]:
+                kwargs = {"availability_domain": ad} if ad is not None else {}
+                data = self.limits.get_resource_availability(
+                    "compute", name, self.compartment, **kwargs
+                ).data
+                available = data.fractional_availability
+                if available is None:
+                    available = data.available
+                if type(available) not in (int, float) or not math.isfinite(available):
+                    raise FatalError(f"Cannot verify quota: no availability value for {name}")
+                values[ad] = available
+            resources[field] = {ad: values[ad if scope == "AD" else None] for ad in ads}
+        rows = [
+            {
+                "availability_domain": ad,
+                "ocpus_available": resources["ocpus"][ad],
+                "memory_gb_available": resources["memory_gb"][ad],
+                "sufficient": (
+                    resources["ocpus"][ad] >= self.c.ocpus
+                    and resources["memory_gb"][ad] >= self.c.memory_gb
+                ),
+            }
+            for ad in ads
+        ]
+        return {"sufficient": any(row["sufficient"] for row in rows), "availability_domains": rows}
 
     def find_existing(self):
         matches = [

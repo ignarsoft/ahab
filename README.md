@@ -106,6 +106,23 @@ requires suitable routes, security rules, and guest firewall settings.
 
 ## Capacity checks
 
+Check A1 compute quota headroom separately from physical host capacity:
+
+```bash
+sudo ahab doctor --check-limits
+```
+
+This read-only check reports available OCPUs and memory for each selected AD,
+respecting the scope reported by OCI. Both resources must fit in the same AD.
+It needs permission to inspect compute limit definitions and resource availability
+in the target compartment. Missing data or denied access fails the check rather
+than assuming unlimited quota. If a matching instance already exists, insufficient
+headroom for another instance does not fail the check. The flag is optional and
+only supported with `doctor`; normal hunting does not add Limits API requests.
+
+Quota headroom is **not** physical capacity, a reservation, or proof of free-tier
+eligibility. This check does not cover boot-volume quotas or other service limits.
+
 | `capacity_mode` | Behavior |
 | --- | --- |
 | `auto` | Checks capacity; falls back to launch if reports are unsupported, inaccessible, or inconclusive. |
